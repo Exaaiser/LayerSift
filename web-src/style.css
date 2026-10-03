@@ -58,6 +58,19 @@ button {
     transparent 38%
   );
 }
+.windows .app {
+  border-radius: 0;
+  background: linear-gradient(
+    155deg,
+    rgba(38, 45, 54, 0.88),
+    rgba(26, 32, 40, 0.92) 52%,
+    rgba(32, 39, 49, 0.9)
+  );
+  backdrop-filter: none;
+}
+.windows .topbar {
+  height: 10px;
+}
 .topbar {
   height: 42px;
   flex: none;

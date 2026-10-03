@@ -1,0 +1,29 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "LayerSift",
+        "width": 440,
+        "height": 630,
+        "minWidth": 400,
+        "minHeight": 590,
+        "maxWidth": 520,
+        "maxHeight": 690,
+        "center": true,
+        "resizable": true,
+        "maximizable": false,
+        "decorations": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": true,
+        "windowEffects": {
+          "effects": ["mica", "acrylic"]
+        }
+      }
+    ]
+  },
+  "bundle": {
+    "targets": "nsis"
+  }
+}

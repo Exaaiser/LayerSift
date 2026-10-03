@@ -4,18 +4,20 @@
 
 LayerSift is an offline desktop app and CLI for inspecting encoded data and recovering embedded files. Give it text, a JSON or SQL dump, or a local file; it reports where content was found and which steps opened it. It can also create Base64 text and cryptographic digests.
 
-## Download for macOS
+## Downloads
 
-The first release supports **Apple Silicon Macs (arm64)**. Get the files from [GitHub Releases](https://github.com/Exaaiser/LayerSift/releases):
+Get the latest files from [GitHub Releases](https://github.com/Exaaiser/LayerSift/releases). The Mac build supports Apple Silicon (arm64); the Windows preview targets x64 PCs.
 
 | File | Use |
 | --- | --- |
 | `LayerSift-macos-arm64.dmg` | Recommended desktop download. Open the disk image and drag `LayerSift.app` to Applications. |
 | `LayerSift-macos-arm64.zip` | Alternative desktop download. Unzip to get `LayerSift.app`. |
 | `layersift-cli-macos-arm64.tar.gz` | Terminal tool only; it does not contain the desktop app. Extract it, then run `./layersift`. |
-| `SHA256SUMS.txt` | Checksums for all three downloads. |
+| `LayerSift-windows-x64-setup.exe` | Windows desktop installer. Run it to install the app. |
+| `layersift-cli-windows-x64.zip` | Windows terminal tool only. Extract it, then run `layersift.exe`. |
+| `SHA256SUMS.txt` | Checksums for all downloads. |
 
-This first build is not signed with an Apple Developer ID or notarized. macOS may warn or block it when downloaded. Review the source and build it locally if you prefer; a signed and notarized package is planned for a later release. The desktop app runs locally and does not upload the supplied data.
+The Mac app is not signed with an Apple Developer ID or notarized, and the Windows installer is not code signed. The operating system may show a warning. Review the source and build it locally if you prefer. The desktop app runs locally and does not upload the supplied data. The Windows desktop layout has automated build coverage; visual and installation feedback on a Windows PC is welcome.
 
 ### Desktop quick start
 
@@ -45,6 +47,8 @@ Running `./layersift` in Terminal opens a guided menu. You can also use commands
 ```
 
 Run `./layersift --help` for every command. The CLI also supports Base64 and hex decoding, Caesar and XOR transforms, and digest verification. Files are created without overwriting existing output.
+
+On Windows, extract `layersift-cli-windows-x64.zip` and run `layersift.exe` in a terminal. Running it without arguments opens the same guided menu.
 
 ## Supported analysis
 
@@ -84,7 +88,7 @@ To create a local unsigned app bundle:
 npm run tauri -- build --bundles app --no-sign
 ```
 
-The built app is under `src-tauri/target/release/bundle/macos/`. The current desktop design and first binary release are tested on macOS Apple Silicon. Windows packaging remains future work.
+The built app is under `src-tauri/target/release/bundle/macos/`. On Windows, install the [Windows Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and run `npm run tauri -- build --bundles nsis`; the installer is written under `src-tauri/target/release/bundle/nsis/`.
 
 ## Design references
 

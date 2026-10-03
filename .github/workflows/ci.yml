@@ -23,6 +23,13 @@ jobs:
         run: cargo test --locked
       - name: Build CLI
         run: cargo build --release --locked
+      - name: Upload Windows CLI
+        if: matrix.os == 'windows-2025'
+        uses: actions/upload-artifact@v4
+        with:
+          name: layersift-windows-cli
+          path: target/release/layersift.exe
+          if-no-files-found: error
 
   desktop:
     runs-on: macos-15
@@ -38,3 +45,24 @@ jobs:
         run: npm run build
       - name: Test desktop backend
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+  desktop-windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Install Node packages
+        run: npm ci
+      - name: Build and test desktop app
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Build NSIS installer
+        run: npm run tauri -- build --bundles nsis
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: layersift-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

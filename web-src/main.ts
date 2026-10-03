@@ -6,6 +6,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 const PROJECT_URL = 'https://github.com/Exaaiser/LayerSift';
 const PROJECT_README_URL = `${PROJECT_URL}/blob/main/README.md`;
 
+if (navigator.userAgent.includes('Windows')) document.documentElement.classList.add('windows');
+
 type Mode = 'analyze' | 'base64' | 'hash';
 type Artifact = { filename?: string; kind?: string; content_hint?: string; origin?: string; steps?: string[]; bytes?: number; preview?: string | null; hex_preview?: string | null };
 type Match = { origin?: string; field_type?: string; bytes?: number; hash_candidates?: string[] };
