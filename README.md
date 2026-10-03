@@ -10,9 +10,10 @@ The first release supports **Apple Silicon Macs (arm64)**. Get the files from [G
 
 | File | Use |
 | --- | --- |
-| `LayerSift-macos-arm64.zip` | Desktop app. Unzip, then open `LayerSift.app`. |
-| `layersift-cli-macos-arm64.tar.gz` | Terminal tool. Extract it, then run `./layersift`. |
-| `SHA256SUMS.txt` | Checksums for both downloads. |
+| `LayerSift-macos-arm64.dmg` | Recommended desktop download. Open the disk image and drag `LayerSift.app` to Applications. |
+| `LayerSift-macos-arm64.zip` | Alternative desktop download. Unzip to get `LayerSift.app`. |
+| `layersift-cli-macos-arm64.tar.gz` | Terminal tool only; it does not contain the desktop app. Extract it, then run `./layersift`. |
+| `SHA256SUMS.txt` | Checksums for all three downloads. |
 
 This first build is not signed with an Apple Developer ID or notarized. macOS may warn or block it when downloaded. Review the source and build it locally if you prefer; a signed and notarized package is planned for a later release. The desktop app runs locally and does not upload the supplied data.
 
