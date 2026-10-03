@@ -1,0 +1,9 @@
+/target/
+/dist/
+/node_modules/
+/web-dist/
+/src-tauri/target/
+/src-tauri/gen/
+.DS_Store
+.env
+.env.*

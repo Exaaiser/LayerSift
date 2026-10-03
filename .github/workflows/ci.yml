@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  cli:
+    strategy:
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Test CLI and analysis core
+        run: cargo test --locked
+      - name: Build CLI
+        run: cargo build --release --locked
+
+  desktop:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Install Node packages
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Test desktop backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

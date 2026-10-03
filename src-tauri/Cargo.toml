@@ -1,0 +1,20 @@
+[package]
+name = "layersift_desktop"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "layersift_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+layersift = { path = ".." }
+base64 = "0.22"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LayerSift",
+  "version": "0.1.0",
+  "identifier": "dev.exaaiser.layersift",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../web-dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "LayerSift",
+        "width": 440,
+        "height": 630,
+        "minWidth": 400,
+        "minHeight": 590,
+        "maxWidth": 520,
+        "maxHeight": 690,
+        "center": true,
+        "resizable": true,
+        "maximizable": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": true,
+        "windowEffects": {
+          "effects": ["liquidGlassRegular", "hudWindow", "mica"],
+          "radius": 18.0,
+          "color": "#14181ecc",
+          "interactive": true
+        }
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

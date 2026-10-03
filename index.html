@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LayerSift</title>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar" data-tauri-drag-region></header>
+
+    <nav class="nav" aria-label="Sections">
+      <button id="tab-menu" class="nav-tab active" type="button" aria-selected="true">Menu</button>
+      <button id="tab-advanced" class="nav-tab" type="button" aria-selected="false">Advanced</button>
+    </nav>
+
+    <main>
+      <section id="view-menu" class="view">
+        <div class="intro">
+          <img src="/layersift-logo.png" alt="LayerSift logo" />
+          <h1>Resolver</h1>
+        </div>
+
+        <div class="segment" role="tablist" aria-label="Operation">
+          <button class="mode active" data-mode="analyze" type="button" aria-selected="true">Analyze</button>
+          <button class="mode" data-mode="base64" type="button" aria-selected="false">Base64</button>
+          <button class="mode" data-mode="hash" type="button" aria-selected="false">Hash</button>
+        </div>
+
+        <label class="input-label" for="entry">INPUT</label>
+        <div class="input-surface">
+          <textarea id="entry" spellcheck="false" placeholder="Paste text or encoded data here…"></textarea>
+          <div id="file-selection" class="file-selection" hidden><span class="file-icon">⌁</span><span id="file-name"></span><button id="remove-file" type="button" aria-label="Remove file">×</button></div>
+        </div>
+
+        <div id="algorithm-row" class="algorithm-row" hidden>
+          <label for="algorithm">Algorithm</label>
+          <select id="algorithm">
+            <option value="sha256">SHA-256</option><option value="sha512">SHA-512</option>
+            <option value="sha3-256">SHA3-256</option><option value="sha3-512">SHA3-512</option>
+            <option value="blake2b">BLAKE2b</option><option value="blake2s">BLAKE2s</option>
+            <option value="sha1">SHA-1 (legacy)</option><option value="md5">MD5 (legacy)</option>
+          </select>
+        </div>
+
+        <div class="action-row">
+          <button id="choose-file" class="attach" type="button"><span>＋</span> Choose file</button>
+          <span id="input-hint" class="input-hint">16 MB Max</span>
+          <button id="run" class="primary" type="button">Analyze <span>↗</span></button>
+        </div>
+      </section>
+
+      <section id="view-advanced" class="view advanced" hidden>
+        <span class="eyebrow">OPTIONAL SETTINGS</span>
+        <h1>Layer options.</h1>
+        <p>Add known keys to include these transformations in your next analysis. Empty fields are ignored.</p>
+        <div class="setting"><label for="caesar">Caesar shift <small>Shift to reverse, 0–25</small></label><input id="caesar" type="number" min="0" max="25" placeholder="e.g. 3" /></div>
+        <div class="setting"><label for="xor-key">XOR key <small>UTF-8 text</small></label><input id="xor-key" type="text" placeholder="Known key" /></div>
+        <div class="setting"><label for="zip-password">ZIP password <small>Opens encrypted archive entries</small></label><input id="zip-password" type="password" placeholder="Known password" /></div>
+        <label class="check-setting"><input id="auto-xor" type="checkbox" checked /><span>Try single-byte XOR signatures<small>Limited to recognized file headers</small></span></label>
+        <div class="advanced-note">These settings apply to the next Analyze action on the Menu tab.</div>
+      </section>
+    </main>
+
+    <footer><div><button id="github-link" type="button">GitHub ↗</button><button id="readme-link" type="button">README ↗</button></div></footer>
+
+    <div id="scrim" class="scrim" hidden></div>
+    <aside id="result-panel" class="result-panel" aria-label="Result" aria-hidden="true">
+      <div class="panel-header"><div><span class="eyebrow">RESULT</span><h2 id="result-title">Analysis</h2></div><button id="close-result" class="icon-button" type="button" aria-label="Close result">×</button></div>
+      <div id="result-body" class="result-body"></div>
+      <div class="panel-footer"><p id="save-message" aria-live="polite"></p><button id="save" class="save-button" type="button">Save to Documents <span>↗</span></button></div>
+    </aside>
+
+  </div>
+  <script type="module" src="/web-src/main.ts"></script>
+</body>
+</html>
