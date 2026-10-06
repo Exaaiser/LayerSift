@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -30,6 +30,7 @@ struct ActionRequest {
     text: Option<String>,
     file_path: Option<String>,
     algorithm: Option<String>,
+    expected_digest: Option<String>,
     caesar_shift: Option<i32>,
     xor_key: Option<String>,
     zip_password: Option<String>,
@@ -206,7 +207,13 @@ fn load_input(
             if metadata.len() > MAX_INPUT {
                 return Err("File exceeds the 16 MB limit.".into());
             }
-            let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+            let mut bytes = Vec::new();
+            fs::File::open(&path)
+                .and_then(|file| file.take(MAX_INPUT + 1).read_to_end(&mut bytes))
+                .map_err(|error| error.to_string())?;
+            if bytes.len() as u64 > MAX_INPUT {
+                return Err("File exceeds the 16 MB limit.".into());
+            }
             Ok((path.display().to_string(), bytes))
         }
         _ => Err("Enter text or choose a file.".into()),
@@ -214,17 +221,39 @@ fn load_input(
 }
 
 #[tauri::command]
-fn run_action(request: ActionRequest, state: tauri::State<'_, AppState>) -> Result<Value, String> {
+fn file_details(path: String) -> Result<Value, String> {
+    let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+    if !metadata.is_file() {
+        return Err("Choose a file.".into());
+    }
+    if metadata.len() > MAX_INPUT {
+        return Err("File exceeds the 16 MB limit.".into());
+    }
+    let mut header = Vec::new();
+    fs::File::open(path)
+        .and_then(|file| file.take(4).read_to_end(&mut header))
+        .map_err(|error| error.to_string())?;
+    Ok(json!({
+        "bytes": metadata.len(),
+        "isZip": matches!(header.as_slice(), b"PK\x03\x04" | b"PK\x05\x06" | b"PK\x07\x08")
+    }))
+}
+
+fn perform_action(request: ActionRequest) -> Result<(Value, StoredResult), String> {
     let ActionRequest {
         mode,
         text,
         file_path,
         algorithm,
+        expected_digest,
         caesar_shift,
         xor_key,
         zip_password,
         auto_xor,
     } = request;
+    if mode == "verify" && file_path.is_none() {
+        return Err("Choose a file to verify its checksum.".into());
+    }
     let (source, bytes) = load_input(text, file_path)?;
     let (response, stored) = match mode.as_str() {
         "analyze" => {
@@ -338,8 +367,58 @@ fn run_action(request: ActionRequest, state: tauri::State<'_, AppState>) -> Resu
                 },
             )
         }
+        "verify" => {
+            let algorithm = algorithm.unwrap_or_else(|| "sha256".into());
+            let actual = digest(&algorithm, &bytes).map_err(|error| error.to_string())?;
+            let expected = expected_digest
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase();
+            if expected.len() != actual.len()
+                || !expected.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(format!(
+                    "Enter exactly {} hexadecimal characters for the selected hash method.",
+                    actual.len()
+                ));
+            }
+            let matches = actual == expected;
+            let headline = if matches {
+                "Checksum matches"
+            } else {
+                "Checksum mismatch"
+            };
+            let explanation = if matches {
+                "The file digest matches the expected checksum. This checks the file against that value; authenticity depends on where you obtained the checksum."
+            } else {
+                "The file digest differs from the expected checksum. Check the selected file, hash method, and expected value."
+            };
+            let comparison = json!({"expected": expected, "actual": actual, "matches": matches});
+            let report = json!({
+                "mode": "verify", "source": source, "algorithm": algorithm,
+                "input_bytes": bytes.len(), "comparison": comparison
+            });
+            (
+                json!({
+                    "mode": "verify", "headline": headline, "explanation": explanation,
+                    "status": if matches { "Match" } else { "Mismatch" }, "source": source,
+                    "inputBytes": bytes.len(), "candidates": [algorithm], "report": report,
+                    "comparison": comparison, "value": actual, "canCopy": true
+                }),
+                StoredResult {
+                    report,
+                    files: vec![("digest.txt".into(), format!("{actual}\n").into_bytes())],
+                },
+            )
+        }
         _ => return Err("Unknown action.".into()),
     };
+    Ok((response, stored))
+}
+
+#[tauri::command]
+fn run_action(request: ActionRequest, state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let (response, stored) = perform_action(request)?;
     *state
         .last
         .lock()
@@ -391,6 +470,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             run_action,
+            file_details,
             save_result,
             create_output_folder
         ])
@@ -407,6 +487,120 @@ mod resolve_tests {
         STANDARD, StoredResult, looks_like_opaque_digest, present, valid_folder_name, write_result,
     };
     use layersift::hashing::digest_candidates;
+
+    struct TempFile(std::path::PathBuf);
+    impl TempFile {
+        fn new(bytes: &[u8]) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "layersift-test-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::write(&path, bytes).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn request(value: serde_json::Value) -> super::ActionRequest {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn verifies_file_bytes_and_reports_both_match_and_mismatch() {
+        let file = TempFile::new(b"hello\n");
+        for algorithm in [
+            "sha256", "sha512", "sha3-256", "sha3-512", "blake2s", "blake2b", "sha1", "md5",
+        ] {
+            let actual = layersift::hashing::digest(algorithm, b"hello\n").unwrap();
+            for (expected, matches) in [
+                (format!(" {} ", actual.to_uppercase()), true),
+                ("0".repeat(actual.len()), false),
+            ] {
+                let (response, stored) = super::perform_action(request(serde_json::json!({
+                    "mode": "verify", "filePath": file.0, "algorithm": algorithm, "expectedDigest": expected
+                }))).unwrap();
+                assert_eq!(response["comparison"]["matches"], matches);
+                assert_eq!(response["value"], actual);
+                assert_eq!(stored.report["comparison"]["actual"], actual);
+                assert_eq!(response["inputBytes"], 6);
+            }
+        }
+    }
+
+    #[test]
+    fn checksum_requires_a_file_and_a_well_formed_digest() {
+        assert!(
+            super::perform_action(request(
+                serde_json::json!({"mode":"verify", "text":"hello"})
+            ))
+            .err()
+            .unwrap()
+            .contains("Choose a file")
+        );
+        let file = TempFile::new(b"hello");
+        for expected in ["", "deadbeef", &"z".repeat(64)] {
+            assert!(super::perform_action(request(serde_json::json!({
+                "mode":"verify", "filePath":file.0, "algorithm":"sha256", "expectedDigest":expected
+            }))).err().unwrap().contains("64 hexadecimal"));
+        }
+    }
+
+    #[test]
+    fn recognizes_zip_content_without_relying_on_filename() {
+        let file = TempFile::new(b"PK\x03\x04fixture");
+        assert_eq!(
+            super::file_details(file.0.display().to_string()).unwrap()["isZip"],
+            true
+        );
+        let file = TempFile::new(b"ordinary text");
+        assert_eq!(
+            super::file_details(file.0.display().to_string()).unwrap()["isZip"],
+            false
+        );
+    }
+
+    #[test]
+    fn known_zip_password_recovers_content_without_persisting_the_password() {
+        let file = TempFile::new(include_bytes!("../../examples/password-protected.zip"));
+        let (response, stored) = super::perform_action(request(serde_json::json!({
+            "mode":"analyze", "filePath":file.0, "zipPassword":"layersift-demo"
+        })))
+        .unwrap();
+        assert!(
+            stored
+                .files
+                .iter()
+                .any(|(_, bytes)| bytes == b"A known password opens this demo archive.\n")
+        );
+        assert!(
+            !serde_json::to_string(&response)
+                .unwrap()
+                .contains("layersift-demo")
+        );
+        assert!(
+            !serde_json::to_string(&stored.report)
+                .unwrap()
+                .contains("layersift-demo")
+        );
+        let (_, locked) = super::perform_action(request(serde_json::json!({
+            "mode":"analyze", "filePath":file.0, "zipPassword":"wrong-password"
+        })))
+        .unwrap();
+        assert!(
+            !locked
+                .files
+                .iter()
+                .any(|(_, bytes)| bytes == b"A known password opens this demo archive.\n")
+        );
+    }
 
     fn opened(input: &str) -> layersift::analysis::Analysis {
         analyze(

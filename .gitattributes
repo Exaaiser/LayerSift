@@ -1,0 +1,8 @@
+* text=auto
+examples/*.txt text eol=lf
+examples/*.sql text eol=lf
+examples/*.json text eol=lf
+examples/*.sha256 text eol=lf
+*.zip binary
+*.png binary
+*.gif binary

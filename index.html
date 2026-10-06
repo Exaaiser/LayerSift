@@ -45,6 +45,16 @@
           </select>
         </div>
 
+        <label id="verify-row" class="option-row" hidden><input id="verify-checksum" type="checkbox" /> Verify a file checksum</label>
+        <div id="expected-row" class="inline-field" hidden>
+          <label for="expected-digest">Expected checksum</label>
+          <input id="expected-digest" type="text" spellcheck="false" autocomplete="off" placeholder="Paste the expected hexadecimal digest…" />
+        </div>
+        <div id="zip-row" class="inline-field" hidden>
+          <label for="zip-password">ZIP password <span>Optional · used for this analysis only</span></label>
+          <input id="zip-password" type="password" autocomplete="off" placeholder="Enter a known password if needed…" />
+        </div>
+
         <div class="action-row">
           <button id="choose-file" class="attach" type="button"><span>＋</span> Choose file</button>
           <span id="input-hint" class="input-hint">16 MB Max</span>

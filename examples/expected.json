@@ -1,0 +1,50 @@
+{
+  "cases": [
+    {
+      "file": "emails.json",
+      "sha256": "b4c9a289323b21a01c3e940f150eb9b8c542587f1abfd8f0e1cc1ffc5e475514",
+      "steps": [
+        "base64 decode"
+      ],
+      "args": []
+    },
+    {
+      "file": "emails.sql",
+      "sha256": "b4c9a289323b21a01c3e940f150eb9b8c542587f1abfd8f0e1cc1ffc5e475514",
+      "steps": [
+        "base64 decode"
+      ],
+      "args": []
+    },
+    {
+      "file": "layered.txt",
+      "sha256": "808ca4802db9a0ff32c0270a6d64d53024e238e678512c8734af0bebc545985c",
+      "steps": [
+        "base64 decode",
+        "gzip decompress",
+        "base64 decode"
+      ],
+      "args": []
+    },
+    {
+      "file": "embedded-image.json",
+      "sha256": "e878950f8091ec010cf5cc723bdea027a8539cf7147cfea199c2f666232dcd4e",
+      "steps": [
+        "base64 decode",
+        "carve png at byte 0"
+      ],
+      "args": []
+    },
+    {
+      "file": "password-protected.zip",
+      "sha256": "d46d9d4595937f3becb8a16649297da542732b1a0be1210a25d4b0ff55c8a441",
+      "steps": [
+        "zip member note.txt"
+      ],
+      "args": [
+        "--zip-password",
+        "layersift-demo"
+      ]
+    }
+  ]
+}

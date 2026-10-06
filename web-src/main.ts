@@ -9,13 +9,14 @@ const PROJECT_README_URL = `${PROJECT_URL}/blob/main/README.md`;
 if (navigator.userAgent.includes('Windows')) document.documentElement.classList.add('windows');
 
 type Operation = 'resolve' | 'create';
-type BackendMode = 'analyze' | 'base64' | 'hash';
+type BackendMode = 'analyze' | 'base64' | 'hash' | 'verify';
 type Artifact = { filename?: string; kind?: string; content_hint?: string; origin?: string; steps?: string[]; bytes?: number; preview?: string | null; hex_preview?: string | null };
 type Match = { origin?: string; field_type?: string; bytes?: number; hash_candidates?: string[] };
 type Response = {
   mode: BackendMode; headline: string; explanation: string; status: string; source: string; inputBytes: number;
   candidates: string[]; value: string | null; preview?: string;
   canCopy: boolean; report: { artifacts?: Artifact[]; matches?: Match[]; notes?: string[] };
+  comparison?: { expected: string; actual: string; matches: boolean };
 };
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -32,6 +33,7 @@ const settingsMessage = byId<HTMLElement>('settings-message');
 const SAVE_DIRECTORY_KEY = 'layersift.saveDirectory';
 let operation: Operation = 'resolve';
 let filePath: string | null = null;
+let fileIsZip = false;
 let current: Response | null = null;
 let saveDirectory: string | null = localStorage.getItem(SAVE_DIRECTORY_KEY);
 let pages: HTMLElement[] = [];
@@ -105,9 +107,11 @@ function render(result: Response): void {
   byId<HTMLButtonElement>('save').disabled = false;
   byId('result-title').textContent = result.headline;
   const overview = newPage();
-  section(overview, 'STATUS', node('p', 'status', result.status));
+  section(overview, 'STATUS', node('p', result.comparison?.matches === false ? 'status mismatch' : 'status', result.status));
   section(overview, 'EXPLANATION', node('p', '', result.explanation));
-  section(overview, 'SOURCE', node('p', '', `${result.source} · ${result.inputBytes.toLocaleString('en-US')} bytes`));
+  const source = node('p', '', `${result.source.split(/[\\/]/).pop() || result.source} · ${result.inputBytes.toLocaleString('en-US')} bytes`);
+  source.title = result.source;
+  section(overview, 'SOURCE', source);
   if (result.candidates.length) {
     const list = node('div', 'pill-list', '');
     for (const name of result.candidates.slice(0, 8)) list.append(node('span', 'pill', term(name)));
@@ -121,6 +125,8 @@ function render(result: Response): void {
   const value = result.value || result.preview;
   if (value) {
     const wrap = node('div', '', '');
+    if (result.comparison) section(wrap, 'EXPECTED CHECKSUM', node('div', 'value', result.comparison.expected));
+    if (result.comparison) wrap.append(node('h3', '', 'ACTUAL CHECKSUM'));
     const excerpt = value.length > 900 ? `${value.slice(0, 900)}…` : value;
     wrap.append(node('div', 'value', excerpt));
     if (value.length > 900) wrap.append(node('small', 'preview-note', 'Preview only. Save the result for the full value.'));
@@ -133,7 +139,7 @@ function render(result: Response): void {
       });
       wrap.append(copy);
     }
-    section(newPage(), result.mode === 'analyze' ? 'EXTRACTED TEXT' : 'GENERATED VALUE', wrap);
+    section(newPage(), result.mode === 'analyze' ? 'EXTRACTED TEXT' : result.mode === 'verify' ? 'CHECKSUM COMPARISON' : 'GENERATED VALUE', wrap);
   }
   const artifacts = result.report.artifacts || [];
   if (artifacts.length) {
@@ -179,7 +185,14 @@ function showView(view: 'menu' | 'settings'): void {
 }
 function updateInputPlaceholder(): void {
   const method = byId<HTMLSelectElement>('method').value;
-  entry.placeholder = operation === 'resolve' ? 'Paste text or encoded data here…' : method === 'base64' ? 'Enter text to encode as Base64…' : 'Enter text to hash…';
+  const hashing = operation === 'create' && method !== 'base64';
+  const verifying = hashing && byId<HTMLInputElement>('verify-checksum').checked;
+  byId('verify-row').hidden = !hashing;
+  byId('expected-row').hidden = !verifying;
+  byId('zip-row').hidden = operation !== 'resolve' || !fileIsZip;
+  byId('view-menu').classList.toggle('has-options', verifying);
+  entry.placeholder = operation === 'resolve' ? 'Paste text or encoded data here…' : verifying ? 'Choose the file whose checksum you want to verify…' : method === 'base64' ? 'Enter text to encode as Base64…' : 'Enter text to hash…';
+  byId('run').firstChild!.textContent = operation === 'resolve' ? 'Resolve ' : verifying ? 'Verify ' : 'Create ';
 }
 function setOperation(next: Operation): void {
   operation = next;
@@ -190,12 +203,14 @@ function setOperation(next: Operation): void {
   }
   byId('method-row').hidden = next !== 'create';
   updateInputPlaceholder();
-  byId('run').firstChild!.textContent = next === 'resolve' ? 'Resolve ' : 'Create ';
 }
 function clearFile(): void {
   filePath = null;
+  fileIsZip = false;
+  byId<HTMLInputElement>('zip-password').value = '';
   byId('file-selection').hidden = true;
   byId('input-hint').hidden = false;
+  updateInputPlaceholder();
 }
 function setSaveDirectory(path: string | null): void {
   saveDirectory = path;
@@ -219,20 +234,21 @@ async function run(): Promise<void> {
   button.firstChild!.textContent = 'Working ';
   try {
     const method = byId<HTMLSelectElement>('method').value;
-    const mode: BackendMode = operation === 'resolve' ? 'analyze' : method === 'base64' ? 'base64' : 'hash';
+    const mode: BackendMode = operation === 'resolve' ? 'analyze' : method === 'base64' ? 'base64' : byId<HTMLInputElement>('verify-checksum').checked ? 'verify' : 'hash';
     const response = await invoke<Response>('run_action', { request: {
       mode,
       text: filePath ? null : entry.value,
       filePath,
-      algorithm: mode === 'hash' ? method : null,
+      algorithm: mode === 'hash' || mode === 'verify' ? method : null,
+      expectedDigest: mode === 'verify' ? byId<HTMLInputElement>('expected-digest').value : null,
       caesarShift: null,
       xorKey: null,
-      zipPassword: null,
+      zipPassword: mode === 'analyze' && fileIsZip ? byId<HTMLInputElement>('zip-password').value || null : null,
       autoXor: mode === 'analyze' ? true : null,
     } });
     render(response);
   } catch (error) { errorPanel(error); }
-  finally { button.disabled = false; button.firstChild!.textContent = label; }
+  finally { byId<HTMLInputElement>('zip-password').value = ''; button.disabled = false; button.firstChild!.textContent = label; }
 }
 
 byId('tab-menu').addEventListener('click', () => showView('menu'));
@@ -268,15 +284,21 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('.mode')) {
   button.addEventListener('click', () => setOperation(button.dataset.operation as Operation));
 }
 byId('method').addEventListener('change', updateInputPlaceholder);
+byId('verify-checksum').addEventListener('change', updateInputPlaceholder);
 byId('choose-file').addEventListener('click', async () => {
   try {
     const selected = await open({ multiple: false, directory: false, title: 'Choose a file' });
     if (typeof selected !== 'string') return;
+    clearFile();
+    const details = await invoke<{ bytes: number; isZip: boolean }>('file_details', { path: selected });
     filePath = selected;
+    fileIsZip = details.isZip;
+    byId<HTMLInputElement>('zip-password').value = '';
     entry.value = '';
     byId('file-name').textContent = selected.split(/[\\/]/).pop() || selected;
     byId('file-selection').hidden = false;
     byId('input-hint').hidden = true;
+    updateInputPlaceholder();
   } catch (error) { errorPanel(error); }
 });
 byId('remove-file').addEventListener('click', clearFile);

@@ -23,6 +23,8 @@ jobs:
         run: cargo test --locked
       - name: Build CLI
         run: cargo build --release --locked
+      - name: Check documented examples
+        run: python scripts/check-examples.py
       - name: Upload Windows CLI
         if: matrix.os == 'windows-2025'
         uses: actions/upload-artifact@v4
