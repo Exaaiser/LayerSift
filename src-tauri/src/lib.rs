@@ -1,6 +1,6 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -53,6 +53,72 @@ fn safe_name(name: &str) -> String {
     } else {
         value
     }
+}
+
+fn output_root(app: &tauri::AppHandle, destination: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(destination) = destination.filter(|value| !value.trim().is_empty()) {
+        let path = PathBuf::from(destination);
+        if !path.is_dir() {
+            return Err("The selected save folder is no longer available. Choose another folder in Settings.".into());
+        }
+        return Ok(path);
+    }
+    let root = app
+        .path()
+        .document_dir()
+        .map_err(|error| error.to_string())?
+        .join("LayerSift");
+    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    Ok(root)
+}
+
+fn valid_folder_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name.len() <= 80
+        && !name.ends_with(' ')
+        && !name.ends_with('.')
+        && !name
+            .chars()
+            .any(|character| character.is_control() || "/\\:*?\"<>|".contains(character))
+}
+
+fn write_result(root: &Path, stored: &StoredResult) -> Result<PathBuf, String> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let folder = (0..1000)
+        .map(|index| root.join(format!("analysis-{timestamp}-{index:03}")))
+        .find(|path| !path.exists())
+        .ok_or("Could not create a new report folder.")?;
+    fs::create_dir(&folder).map_err(|error| error.to_string())?;
+    let pretty = serde_json::to_string_pretty(&stored.report).map_err(|error| error.to_string())?;
+    fs::write(folder.join("report.json"), &pretty).map_err(|error| error.to_string())?;
+    let file_list = if stored.files.is_empty() {
+        "No extracted files.".to_string()
+    } else {
+        stored
+            .files
+            .iter()
+            .map(|(name, _)| format!("- {name}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let markdown = format!(
+        "# LayerSift report\n\nSaved locally.\n\n## Summary\n\n{pretty}\n\n## Files\n\n{file_list}\n"
+    );
+    fs::write(folder.join("report.md"), markdown).map_err(|error| error.to_string())?;
+    for (name, bytes) in &stored.files {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(folder.join(name))
+            .map_err(|error| error.to_string())?;
+        file.write_all(bytes).map_err(|error| error.to_string())?;
+    }
+    Ok(folder)
 }
 
 fn readable(data: &[u8]) -> bool {
@@ -282,9 +348,28 @@ fn run_action(request: ActionRequest, state: tauri::State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-fn save_to_documents(
+fn create_output_folder(
+    app: tauri::AppHandle,
+    parent_path: Option<String>,
+    name: String,
+) -> Result<String, String> {
+    let name = name.trim();
+    if !valid_folder_name(name) {
+        return Err(
+            "Enter a folder name without slashes or special characters (up to 80 bytes).".into(),
+        );
+    }
+    let parent = output_root(&app, parent_path.as_deref())?;
+    let folder = parent.join(name);
+    fs::create_dir(&folder).map_err(|error| error.to_string())?;
+    Ok(folder.display().to_string())
+}
+
+#[tauri::command]
+fn save_result(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
+    destination: Option<String>,
 ) -> Result<String, String> {
     let guard = state
         .last
@@ -293,45 +378,8 @@ fn save_to_documents(
     let stored = guard
         .as_ref()
         .ok_or("Analyze or create a value before saving.")?;
-    let documents = app
-        .path()
-        .document_dir()
-        .map_err(|error| error.to_string())?;
-    let root = documents.join("LayerSift");
-    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_secs();
-    let folder = (0..1000)
-        .map(|index| root.join(format!("analysis-{timestamp}-{index:03}")))
-        .find(|path| !path.exists())
-        .ok_or("Could not create a new report folder.")?;
-    fs::create_dir(&folder).map_err(|error| error.to_string())?;
-    let pretty = serde_json::to_string_pretty(&stored.report).map_err(|error| error.to_string())?;
-    fs::write(folder.join("report.json"), &pretty).map_err(|error| error.to_string())?;
-    let file_list = if stored.files.is_empty() {
-        "No extracted files.".to_string()
-    } else {
-        stored
-            .files
-            .iter()
-            .map(|(name, _)| format!("- {name}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let markdown = format!(
-        "# LayerSift report\n\nSaved locally.\n\n## Summary\n\n{pretty}\n\n## Files\n\n{file_list}\n"
-    );
-    fs::write(folder.join("report.md"), markdown).map_err(|error| error.to_string())?;
-    for (name, bytes) in &stored.files {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(folder.join(name))
-            .map_err(|error| error.to_string())?;
-        file.write_all(bytes).map_err(|error| error.to_string())?;
-    }
+    let root = output_root(&app, destination.as_deref())?;
+    let folder = write_result(&root, stored)?;
     Ok(folder.display().to_string())
 }
 
@@ -341,7 +389,11 @@ pub fn run() {
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![run_action, save_to_documents])
+        .invoke_handler(tauri::generate_handler![
+            run_action,
+            save_result,
+            create_output_folder
+        ])
         .run(tauri::generate_context!())
         .expect("desktop application failed");
 }
@@ -351,7 +403,9 @@ mod resolve_tests {
     use base64::Engine;
     use layersift::analysis::{Options, analyze};
 
-    use super::{STANDARD, looks_like_opaque_digest, present};
+    use super::{
+        STANDARD, StoredResult, looks_like_opaque_digest, present, valid_folder_name, write_result,
+    };
     use layersift::hashing::digest_candidates;
 
     fn opened(input: &str) -> layersift::analysis::Analysis {
@@ -395,5 +449,44 @@ mod resolve_tests {
             &digest_candidates(&input),
             &analysis.artifacts
         ));
+    }
+
+    #[test]
+    fn writes_report_and_files_under_selected_folder() {
+        let root = std::env::temp_dir().join(format!(
+            "layersift-save-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let stored = StoredResult {
+            report: serde_json::json!({"mode": "analyze"}),
+            files: vec![("sample.txt".into(), b"hello".to_vec())],
+        };
+        let folder = write_result(&root, &stored).unwrap();
+        assert_eq!(folder.parent(), Some(root.as_path()));
+        assert!(folder.join("report.json").is_file());
+        assert!(folder.join("report.md").is_file());
+        assert_eq!(std::fs::read(folder.join("sample.txt")).unwrap(), b"hello");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_folder_names_that_escape_the_selected_location() {
+        assert!(valid_folder_name("Project results"));
+        for name in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "nested/folder",
+            "nested\\folder",
+            "bad:name",
+        ] {
+            assert!(!valid_folder_name(name));
+        }
     }
 }

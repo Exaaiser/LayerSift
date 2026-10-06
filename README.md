@@ -24,9 +24,9 @@ The Mac app has a valid ad hoc signature, but is not signed with an Apple Develo
 1. Paste text or choose a file, up to 16 MB.
 2. Choose **Analyze**, **Base64**, or **Hash**.
 3. Read the result panel. Recovered files show their source, transformation steps, byte size, and a short hex preview when the content is binary.
-4. Select **Save to Documents** to write a report and recovered files under `~/Documents/LayerSift/`.
+4. Select **Save result** to write a report and recovered files. The default location is `~/Documents/LayerSift/`.
 
-**Advanced** accepts a known Caesar shift, XOR key, or ZIP password for the next analysis. It can also try single-byte XOR keys against recognized file headers.
+**Settings** lets you choose a save folder or create a new folder inside the current location. LayerSift remembers the selected location on that computer. Each save creates a separate `analysis-*` folder. The desktop analyzer continues to try single-byte XOR keys against recognized file headers. Known Caesar shifts, XOR keys, and ZIP passwords remain available through the CLI; they are not in the desktop Settings screen.
 
 ### CLI quick start
 
@@ -56,8 +56,8 @@ On Windows, extract `layersift-cli-windows-x64.zip` and run `layersift.exe` in a
 | --- | --- |
 | Encoded fields | Base64 and hex in plain text, JSON strings, and SQL string literals |
 | Layers | Base64, hex, gzip, zlib; up to four analysis steps |
-| Basic ciphers | Caesar with a supplied shift; XOR with a supplied key; single-byte XOR detection for known file signatures |
-| Recovered files | Embedded PNG, JPEG, PDF, and ZIP members; ZIP passwords supplied by the user |
+| Basic ciphers | CLI: Caesar with a supplied shift and XOR with a supplied key; desktop and CLI: single-byte XOR detection for known file signatures |
+| Recovered files | Embedded PNG, JPEG, PDF, and ZIP members; ZIP passwords supplied through the CLI |
 | Hashes | MD5, SHA-1, SHA-2, SHA-3, and BLAKE2 creation; CLI verification; possible format reporting based on digest shape |
 | Reports | Source and transformation steps, byte counts, SHA-256 fingerprints, JSON report, local extraction |
 

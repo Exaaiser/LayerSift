@@ -11,7 +11,7 @@
 
     <nav class="nav" aria-label="Sections">
       <button id="tab-menu" class="nav-tab active" type="button" aria-selected="true">Menu</button>
-      <button id="tab-advanced" class="nav-tab" type="button" aria-selected="false">Advanced</button>
+      <button id="tab-settings" class="nav-tab" type="button" aria-selected="false">Settings</button>
     </nav>
 
     <main>
@@ -50,15 +50,26 @@
         </div>
       </section>
 
-      <section id="view-advanced" class="view advanced" hidden>
-        <span class="eyebrow">OPTIONAL SETTINGS</span>
-        <h1>Layer options.</h1>
-        <p>Add known keys to include these transformations in your next analysis. Empty fields are ignored.</p>
-        <div class="setting"><label for="caesar">Caesar shift <small>Shift to reverse, 0–25</small></label><input id="caesar" type="number" min="0" max="25" placeholder="e.g. 3" /></div>
-        <div class="setting"><label for="xor-key">XOR key <small>UTF-8 text</small></label><input id="xor-key" type="text" placeholder="Known key" /></div>
-        <div class="setting"><label for="zip-password">ZIP password <small>Opens encrypted archive entries</small></label><input id="zip-password" type="password" placeholder="Known password" /></div>
-        <label class="check-setting"><input id="auto-xor" type="checkbox" checked /><span>Try single-byte XOR signatures<small>Limited to recognized file headers</small></span></label>
-        <div class="advanced-note">These settings apply to the next Analyze action on the Menu tab.</div>
+      <section id="view-settings" class="view settings" hidden>
+        <span class="eyebrow">SETTINGS</span>
+        <h1>Save location.</h1>
+        <p>Choose where LayerSift saves reports and recovered files.</p>
+        <div class="location-card">
+          <span class="eyebrow">CURRENT FOLDER</span>
+          <strong id="save-path" title="Documents / LayerSift">Documents / LayerSift</strong>
+          <small>Each save creates a separate analysis folder here.</small>
+        </div>
+        <div class="location-actions">
+          <button id="choose-output" class="attach" type="button">Choose folder</button>
+          <button id="new-output" class="attach" type="button">New folder</button>
+        </div>
+        <div id="new-folder-row" class="new-folder-row" hidden>
+          <input id="new-folder-name" type="text" maxlength="80" placeholder="Folder name" aria-label="New folder name" />
+          <button id="create-folder" class="attach" type="button">Create</button>
+          <button id="cancel-folder" class="icon-button" type="button" aria-label="Cancel new folder">×</button>
+        </div>
+        <button id="reset-output" class="secondary" type="button">Use Documents / LayerSift</button>
+        <p id="settings-message" class="settings-message" aria-live="polite"></p>
       </section>
     </main>
 
@@ -68,7 +79,11 @@
     <aside id="result-panel" class="result-panel" aria-label="Result" aria-hidden="true">
       <div class="panel-header"><div><span class="eyebrow">RESULT</span><h2 id="result-title">Analysis</h2></div><button id="close-result" class="icon-button" type="button" aria-label="Close result">×</button></div>
       <div id="result-body" class="result-body"></div>
-      <div class="panel-footer"><p id="save-message" aria-live="polite"></p><button id="save" class="save-button" type="button">Save to Documents <span>↗</span></button></div>
+      <div class="panel-footer">
+        <div class="result-pagination"><button id="previous-page" type="button" aria-label="Previous result page">←</button><span id="page-count">1 / 1</span><button id="next-page" type="button" aria-label="Next result page">→</button></div>
+        <p id="save-message" aria-live="polite"></p>
+        <button id="save" class="save-button" type="button">Save result <span>↗</span></button>
+      </div>
     </aside>
 
   </div>

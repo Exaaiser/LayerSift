@@ -27,9 +27,14 @@ const panel = byId<HTMLElement>('result-panel');
 const body = byId<HTMLElement>('result-body');
 const scrim = byId<HTMLElement>('scrim');
 const message = byId<HTMLElement>('save-message');
+const settingsMessage = byId<HTMLElement>('settings-message');
+const SAVE_DIRECTORY_KEY = 'layersift.saveDirectory';
 let mode: Mode = 'analyze';
 let filePath: string | null = null;
 let current: Response | null = null;
+let saveDirectory: string | null = localStorage.getItem(SAVE_DIRECTORY_KEY);
+let pages: HTMLElement[] = [];
+let pageIndex = 0;
 
 function node(tag: string, className: string, content: string): HTMLElement {
   const element = document.createElement(tag);
@@ -37,10 +42,10 @@ function node(tag: string, className: string, content: string): HTMLElement {
   element.textContent = content;
   return element;
 }
-function section(title: string, content: HTMLElement): void {
+function section(target: HTMLElement, title: string, content: HTMLElement): void {
   const wrap = node('section', 'result-section', '');
   wrap.append(node('h3', '', title), content);
-  body.append(wrap);
+  target.append(wrap);
 }
 function detail(title: string, description: string): HTMLElement {
   const wrap = node('div', 'detail', '');
@@ -69,34 +74,55 @@ function closePanel(): void {
   panel.setAttribute('aria-hidden', 'true');
   scrim.hidden = true;
 }
+function newPage(): HTMLElement {
+  const page = node('div', 'result-page', '');
+  pages.push(page);
+  return page;
+}
+function showPage(index: number): void {
+  pageIndex = Math.max(0, Math.min(index, pages.length - 1));
+  body.replaceChildren(pages[pageIndex]);
+  byId('page-count').textContent = `${pageIndex + 1} / ${pages.length}`;
+  byId<HTMLButtonElement>('previous-page').disabled = pageIndex === 0;
+  byId<HTMLButtonElement>('next-page').disabled = pageIndex === pages.length - 1;
+}
 function errorPanel(error: unknown): void {
   current = null;
-  body.replaceChildren();
+  pages = [];
   byId('result-title').textContent = 'Action failed';
-  section('ERROR', node('p', '', String(error)));
+  section(newPage(), 'ERROR', node('p', '', String(error)));
+  showPage(0);
   byId<HTMLButtonElement>('save').disabled = true;
   message.textContent = '';
   openPanel();
 }
 function render(result: Response): void {
   current = result;
-  body.replaceChildren();
+  pages = [];
   message.textContent = '';
   message.classList.remove('error');
   byId<HTMLButtonElement>('save').disabled = false;
   byId('result-title').textContent = result.headline;
-  section('STATUS', node('p', 'status', result.status));
-  section('EXPLANATION', node('p', '', result.explanation));
-  section('SOURCE', node('p', '', `${result.source} · ${result.inputBytes.toLocaleString('en-US')} bytes`));
+  const overview = newPage();
+  section(overview, 'STATUS', node('p', 'status', result.status));
+  section(overview, 'EXPLANATION', node('p', '', result.explanation));
+  section(overview, 'SOURCE', node('p', '', `${result.source} · ${result.inputBytes.toLocaleString('en-US')} bytes`));
   if (result.candidates.length) {
     const list = node('div', 'pill-list', '');
-    for (const name of result.candidates) list.append(node('span', 'pill', term(name)));
-    section(result.mode === 'analyze' ? 'POSSIBLE FORMATS' : 'ALGORITHM', list);
+    for (const name of result.candidates.slice(0, 8)) list.append(node('span', 'pill', term(name)));
+    section(overview, result.mode === 'analyze' ? 'POSSIBLE FORMATS' : 'ALGORITHM', list);
+    for (let offset = 8; offset < result.candidates.length; offset += 8) {
+      const more = node('div', 'pill-list', '');
+      for (const name of result.candidates.slice(offset, offset + 8)) more.append(node('span', 'pill', term(name)));
+      section(newPage(), `POSSIBLE FORMATS · ${offset + 1}–${Math.min(offset + 8, result.candidates.length)}`, more);
+    }
   }
   const value = result.value || result.preview;
   if (value) {
     const wrap = node('div', '', '');
-    wrap.append(node('div', 'value', value));
+    const excerpt = value.length > 900 ? `${value.slice(0, 900)}…` : value;
+    wrap.append(node('div', 'value', excerpt));
+    if (value.length > 900) wrap.append(node('small', 'preview-note', 'Preview only. Save the result for the full value.'));
     if (result.canCopy && result.value) {
       const copy = node('button', 'secondary', 'Copy ↗') as HTMLButtonElement;
       copy.type = 'button';
@@ -106,37 +132,44 @@ function render(result: Response): void {
       });
       wrap.append(copy);
     }
-    section(result.mode === 'analyze' ? 'EXTRACTED TEXT' : 'GENERATED VALUE', wrap);
+    section(newPage(), result.mode === 'analyze' ? 'EXTRACTED TEXT' : 'GENERATED VALUE', wrap);
   }
   const artifacts = result.report.artifacts || [];
   if (artifacts.length) {
-    const list = node('div', '', '');
-    for (const item of artifacts.slice(0, 12)) {
-      const path = (item.steps || []).map(term).join(' → ');
-      const size = item.bytes === undefined ? null : `${item.bytes.toLocaleString('en-US')} bytes`;
-      const firstBytes = item.hex_preview ? `First bytes: ${item.hex_preview}${item.bytes && item.bytes > 16 ? ' …' : ''}` : null;
-      const description = [item.content_hint ? term(item.content_hint) : null, size, item.origin, path, item.preview || firstBytes].filter(Boolean).join(' · ');
-      list.append(detail(item.filename || item.kind || 'Content', description));
+    for (let offset = 0; offset < artifacts.length; offset += 3) {
+      const list = node('div', '', '');
+      for (const item of artifacts.slice(offset, offset + 3)) {
+        const path = (item.steps || []).map(term).join(' → ');
+        const size = item.bytes === undefined ? null : `${item.bytes.toLocaleString('en-US')} bytes`;
+        const firstBytes = item.hex_preview ? `First bytes: ${item.hex_preview}${item.bytes && item.bytes > 16 ? ' …' : ''}` : null;
+        const description = [item.content_hint ? term(item.content_hint) : null, size, item.origin, path, item.preview || firstBytes].filter(Boolean).join(' · ');
+        list.append(detail(item.filename || item.kind || 'Content', description));
+      }
+      section(newPage(), `FOUND CONTENT · ${offset + 1}–${Math.min(offset + 3, artifacts.length)} OF ${artifacts.length}`, list);
     }
-    section('FOUND CONTENT · ' + artifacts.length, list);
   }
   const matches = result.report.matches || [];
   if (matches.length) {
-    const list = node('div', '', '');
-    for (const item of matches.slice(0, 8)) {
-      const kinds = item.hash_candidates?.length ? ' · possible hash: ' + item.hash_candidates.map(term).join(', ') : '';
-      list.append(detail(item.origin || 'Location', term(item.field_type || 'Field') + ' · ' + (item.bytes || 0) + ' bytes' + kinds));
+    for (let offset = 0; offset < matches.length; offset += 4) {
+      const list = node('div', '', '');
+      for (const item of matches.slice(offset, offset + 4)) {
+        const kinds = item.hash_candidates?.length ? ' · possible hash: ' + item.hash_candidates.map(term).join(', ') : '';
+        list.append(detail(item.origin || 'Location', term(item.field_type || 'Field') + ' · ' + (item.bytes || 0) + ' bytes' + kinds));
+      }
+      section(newPage(), `SCANNED FIELDS · ${offset + 1}–${Math.min(offset + 4, matches.length)} OF ${matches.length}`, list);
     }
-    section('SCANNED FIELDS · ' + matches.length, list);
   }
   const notes = result.report.notes || [];
-  if (notes.length) section('NOTES', node('p', '', notes.slice(0, 5).join(' · ')));
+  for (let offset = 0; offset < notes.length; offset += 2) {
+    section(newPage(), `NOTES · ${offset + 1}–${Math.min(offset + 2, notes.length)} OF ${notes.length}`, node('p', '', notes.slice(offset, offset + 2).join('\n\n')));
+  }
+  showPage(0);
   openPanel();
 }
-function showView(view: 'menu' | 'advanced'): void {
+function showView(view: 'menu' | 'settings'): void {
   byId('view-menu').hidden = view !== 'menu';
-  byId('view-advanced').hidden = view !== 'advanced';
-  for (const name of ['menu', 'advanced'] as const) {
+  byId('view-settings').hidden = view !== 'settings';
+  for (const name of ['menu', 'settings'] as const) {
     const tab = byId<HTMLButtonElement>('tab-' + name);
     tab.classList.toggle('active', view === name);
     tab.setAttribute('aria-selected', view === name ? 'true' : 'false');
@@ -159,15 +192,23 @@ function clearFile(): void {
   byId('file-selection').hidden = true;
   byId('input-hint').hidden = false;
 }
+function setSaveDirectory(path: string | null): void {
+  saveDirectory = path;
+  if (path) localStorage.setItem(SAVE_DIRECTORY_KEY, path);
+  else localStorage.removeItem(SAVE_DIRECTORY_KEY);
+  const display = byId('save-path');
+  display.textContent = path || 'Documents / LayerSift';
+  display.title = path || 'Documents / LayerSift';
+  settingsMessage.textContent = path ? 'Future saves will go to this folder.' : 'Using the default Documents folder.';
+  settingsMessage.classList.remove('error');
+}
+function settingsError(error: unknown): void {
+  settingsMessage.textContent = String(error);
+  settingsMessage.classList.add('error');
+}
 async function run(): Promise<void> {
   const button = byId<HTMLButtonElement>('run');
   if (button.disabled) return;
-  const caesarField = byId<HTMLInputElement>('caesar').value.trim();
-  const caesarShift = caesarField ? Number(caesarField) : null;
-  if (caesarShift !== null && (!Number.isInteger(caesarShift) || caesarShift < 0 || caesarShift > 25)) {
-    errorPanel('Caesar shift must be a whole number from 0 to 25.');
-    return;
-  }
   button.disabled = true;
   const label = button.firstChild!.textContent;
   button.firstChild!.textContent = 'Working ';
@@ -177,10 +218,10 @@ async function run(): Promise<void> {
       text: filePath ? null : entry.value,
       filePath,
       algorithm: mode === 'hash' ? byId<HTMLSelectElement>('algorithm').value : null,
-      caesarShift: mode === 'analyze' ? caesarShift : null,
-      xorKey: mode === 'analyze' ? byId<HTMLInputElement>('xor-key').value : null,
-      zipPassword: mode === 'analyze' ? byId<HTMLInputElement>('zip-password').value : null,
-      autoXor: mode === 'analyze' ? byId<HTMLInputElement>('auto-xor').checked : null,
+      caesarShift: null,
+      xorKey: null,
+      zipPassword: null,
+      autoXor: mode === 'analyze' ? true : null,
     } });
     render(response);
   } catch (error) { errorPanel(error); }
@@ -188,7 +229,34 @@ async function run(): Promise<void> {
 }
 
 byId('tab-menu').addEventListener('click', () => showView('menu'));
-byId('tab-advanced').addEventListener('click', () => showView('advanced'));
+byId('tab-settings').addEventListener('click', () => showView('settings'));
+byId('previous-page').addEventListener('click', () => showPage(pageIndex - 1));
+byId('next-page').addEventListener('click', () => showPage(pageIndex + 1));
+setSaveDirectory(saveDirectory);
+byId('choose-output').addEventListener('click', async () => {
+  try {
+    const selected = await open({ directory: true, multiple: false, canCreateDirectories: true, title: 'Choose where to save analyses', ...(saveDirectory ? { defaultPath: saveDirectory } : {}) });
+    if (typeof selected === 'string') setSaveDirectory(selected);
+  } catch (error) { settingsError(error); }
+});
+byId('new-output').addEventListener('click', () => {
+  byId('new-folder-row').hidden = false;
+  byId<HTMLInputElement>('new-folder-name').focus();
+});
+byId('cancel-folder').addEventListener('click', () => { byId('new-folder-row').hidden = true; });
+byId('create-folder').addEventListener('click', async () => {
+  const name = byId<HTMLInputElement>('new-folder-name').value.trim();
+  try {
+    const path = await invoke<string>('create_output_folder', { parentPath: saveDirectory, name });
+    setSaveDirectory(path);
+    byId<HTMLInputElement>('new-folder-name').value = '';
+    byId('new-folder-row').hidden = true;
+  } catch (error) { settingsError(error); }
+});
+byId('new-folder-name').addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); byId<HTMLButtonElement>('create-folder').click(); }
+});
+byId('reset-output').addEventListener('click', () => setSaveDirectory(null));
 for (const button of document.querySelectorAll<HTMLButtonElement>('.mode')) {
   button.addEventListener('click', () => setMode(button.dataset.mode as Mode));
 }
@@ -214,7 +282,7 @@ byId('save').addEventListener('click', async () => {
   button.disabled = true;
   message.textContent = 'Saving…';
   message.classList.remove('error');
-  try { message.textContent = 'Saved: ' + await invoke<string>('save_to_documents'); }
+  try { message.textContent = 'Saved: ' + await invoke<string>('save_result', { destination: saveDirectory }); }
   catch (error) { message.textContent = String(error); message.classList.add('error'); }
   finally { button.disabled = false; }
 });
