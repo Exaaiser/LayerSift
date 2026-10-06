@@ -72,6 +72,27 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build NSIS installer
         run: npm run tauri -- build --bundles nsis
+      - name: Install and launch Windows app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer is missing' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'LayerSiftSmoke'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS installer failed with exit code $($install.ExitCode)" }
+          $app = Get-ChildItem $installDir -Recurse -File -Filter '*.exe' |
+            Where-Object { $_.Name -match 'layersift' -and $_.Name -notmatch 'uninstall' } |
+            Select-Object -First 1
+          if (-not $app) { throw "Installed LayerSift executable is missing in $installDir" }
+          $process = Start-Process -FilePath $app.FullName -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            $process.Refresh()
+            if ($process.HasExited) { throw "LayerSift exited shortly after launch with code $($process.ExitCode)" }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
