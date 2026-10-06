@@ -8,11 +8,12 @@ const PROJECT_README_URL = `${PROJECT_URL}/blob/main/README.md`;
 
 if (navigator.userAgent.includes('Windows')) document.documentElement.classList.add('windows');
 
-type Mode = 'analyze' | 'base64' | 'hash';
+type Operation = 'resolve' | 'create';
+type BackendMode = 'analyze' | 'base64' | 'hash';
 type Artifact = { filename?: string; kind?: string; content_hint?: string; origin?: string; steps?: string[]; bytes?: number; preview?: string | null; hex_preview?: string | null };
 type Match = { origin?: string; field_type?: string; bytes?: number; hash_candidates?: string[] };
 type Response = {
-  mode: Mode; headline: string; explanation: string; status: string; source: string; inputBytes: number;
+  mode: BackendMode; headline: string; explanation: string; status: string; source: string; inputBytes: number;
   candidates: string[]; value: string | null; preview?: string;
   canCopy: boolean; report: { artifacts?: Artifact[]; matches?: Match[]; notes?: string[] };
 };
@@ -29,7 +30,7 @@ const scrim = byId<HTMLElement>('scrim');
 const message = byId<HTMLElement>('save-message');
 const settingsMessage = byId<HTMLElement>('settings-message');
 const SAVE_DIRECTORY_KEY = 'layersift.saveDirectory';
-let mode: Mode = 'analyze';
+let operation: Operation = 'resolve';
 let filePath: string | null = null;
 let current: Response | null = null;
 let saveDirectory: string | null = localStorage.getItem(SAVE_DIRECTORY_KEY);
@@ -176,16 +177,20 @@ function showView(view: 'menu' | 'settings'): void {
   }
   closePanel();
 }
-function setMode(next: Mode): void {
-  mode = next;
+function updateInputPlaceholder(): void {
+  const method = byId<HTMLSelectElement>('method').value;
+  entry.placeholder = operation === 'resolve' ? 'Paste text or encoded data here…' : method === 'base64' ? 'Enter text to encode as Base64…' : 'Enter text to hash…';
+}
+function setOperation(next: Operation): void {
+  operation = next;
   for (const button of document.querySelectorAll<HTMLButtonElement>('.mode')) {
-    const selected = button.dataset.mode === next;
+    const selected = button.dataset.operation === next;
     button.classList.toggle('active', selected);
     button.setAttribute('aria-selected', selected ? 'true' : 'false');
   }
-  byId('algorithm-row').hidden = next !== 'hash';
-  entry.placeholder = next === 'analyze' ? 'Paste text or encoded data here…' : next === 'base64' ? 'Enter text to encode as Base64…' : 'Enter text to hash…';
-  byId('run').firstChild!.textContent = next === 'analyze' ? 'Analyze ' : 'Create ';
+  byId('method-row').hidden = next !== 'create';
+  updateInputPlaceholder();
+  byId('run').firstChild!.textContent = next === 'resolve' ? 'Resolve ' : 'Create ';
 }
 function clearFile(): void {
   filePath = null;
@@ -213,11 +218,13 @@ async function run(): Promise<void> {
   const label = button.firstChild!.textContent;
   button.firstChild!.textContent = 'Working ';
   try {
+    const method = byId<HTMLSelectElement>('method').value;
+    const mode: BackendMode = operation === 'resolve' ? 'analyze' : method === 'base64' ? 'base64' : 'hash';
     const response = await invoke<Response>('run_action', { request: {
       mode,
       text: filePath ? null : entry.value,
       filePath,
-      algorithm: mode === 'hash' ? byId<HTMLSelectElement>('algorithm').value : null,
+      algorithm: mode === 'hash' ? method : null,
       caesarShift: null,
       xorKey: null,
       zipPassword: null,
@@ -258,8 +265,9 @@ byId('new-folder-name').addEventListener('keydown', event => {
 });
 byId('reset-output').addEventListener('click', () => setSaveDirectory(null));
 for (const button of document.querySelectorAll<HTMLButtonElement>('.mode')) {
-  button.addEventListener('click', () => setMode(button.dataset.mode as Mode));
+  button.addEventListener('click', () => setOperation(button.dataset.operation as Operation));
 }
+byId('method').addEventListener('change', updateInputPlaceholder);
 byId('choose-file').addEventListener('click', async () => {
   try {
     const selected = await open({ multiple: false, directory: false, title: 'Choose a file' });

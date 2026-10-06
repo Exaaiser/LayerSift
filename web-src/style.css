@@ -263,7 +263,7 @@ textarea::placeholder {
   height: 24px;
   font-size: 18px;
 }
-.algorithm-row {
+.method-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -271,7 +271,7 @@ textarea::placeholder {
   color: #a7b4c1;
   font-size: 11px;
 }
-.algorithm-row select {
+.method-row select {
   width: 148px;
   padding: 7px 9px;
   border-radius: 8px;

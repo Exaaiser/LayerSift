@@ -22,9 +22,8 @@
         </div>
 
         <div class="segment" role="tablist" aria-label="Operation">
-          <button class="mode active" data-mode="analyze" type="button" aria-selected="true">Analyze</button>
-          <button class="mode" data-mode="base64" type="button" aria-selected="false">Base64</button>
-          <button class="mode" data-mode="hash" type="button" aria-selected="false">Hash</button>
+          <button class="mode active" data-operation="resolve" type="button" aria-selected="true">Resolve</button>
+          <button class="mode" data-operation="create" type="button" aria-selected="false">Create</button>
         </div>
 
         <label class="input-label" for="entry">INPUT</label>
@@ -33,20 +32,23 @@
           <div id="file-selection" class="file-selection" hidden><span class="file-icon">⌁</span><span id="file-name"></span><button id="remove-file" type="button" aria-label="Remove file">×</button></div>
         </div>
 
-        <div id="algorithm-row" class="algorithm-row" hidden>
-          <label for="algorithm">Algorithm</label>
-          <select id="algorithm">
-            <option value="sha256">SHA-256</option><option value="sha512">SHA-512</option>
-            <option value="sha3-256">SHA3-256</option><option value="sha3-512">SHA3-512</option>
-            <option value="blake2b">BLAKE2b</option><option value="blake2s">BLAKE2s</option>
-            <option value="sha1">SHA-1 (legacy)</option><option value="md5">MD5 (legacy)</option>
+        <div id="method-row" class="method-row" hidden>
+          <label for="method">Method</label>
+          <select id="method">
+            <optgroup label="Encoding"><option value="base64">Base64</option></optgroup>
+            <optgroup label="Hash digests">
+              <option value="sha256">SHA-256</option><option value="sha512">SHA-512</option>
+              <option value="sha3-256">SHA3-256</option><option value="sha3-512">SHA3-512</option>
+              <option value="blake2b">BLAKE2b</option><option value="blake2s">BLAKE2s</option>
+              <option value="sha1">SHA-1 (legacy)</option><option value="md5">MD5 (legacy)</option>
+            </optgroup>
           </select>
         </div>
 
         <div class="action-row">
           <button id="choose-file" class="attach" type="button"><span>＋</span> Choose file</button>
           <span id="input-hint" class="input-hint">16 MB Max</span>
-          <button id="run" class="primary" type="button">Analyze <span>↗</span></button>
+          <button id="run" class="primary" type="button">Resolve <span>↗</span></button>
         </div>
       </section>
 

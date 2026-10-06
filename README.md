@@ -22,7 +22,7 @@ The Mac app has a valid ad hoc signature, but is not signed with an Apple Develo
 ### Desktop quick start
 
 1. Paste text or choose a file, up to 16 MB.
-2. Choose **Analyze**, **Base64**, or **Hash**.
+2. Choose **Resolve** to inspect input, or **Create** and pick Base64 or a hash method.
 3. Read the result panel. Recovered files show their source, transformation steps, byte size, and a short hex preview when the content is binary.
 4. Select **Save result** to write a report and recovered files. The default location is `~/Documents/LayerSift/`.
 
