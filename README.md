@@ -17,7 +17,7 @@ Get the latest files from [GitHub Releases](https://github.com/Exaaiser/LayerSif
 | `layersift-cli-windows-x64.zip` | Windows terminal tool only. Extract it, then run `layersift.exe`. |
 | `SHA256SUMS.txt` | Checksums for all downloads. |
 
-The Mac app is not signed with an Apple Developer ID or notarized, and the Windows installer is not code signed. The operating system may show a warning. Review the source and build it locally if you prefer. The desktop app runs locally and does not upload the supplied data. The Windows desktop layout has automated build coverage; visual and installation feedback on a Windows PC is welcome.
+The Mac app has a valid ad hoc signature, but is not signed with an Apple Developer ID or notarized. On first launch, macOS may require you to open **System Settings → Privacy & Security** and choose **Open Anyway**. The Windows installer is not code signed and may also show a warning. Review the source and build it locally if you prefer. The desktop app runs locally and does not upload the supplied data. The Windows desktop layout has automated build coverage; visual and installation feedback on a Windows PC is welcome.
 
 ### Desktop quick start
 
@@ -82,10 +82,11 @@ npm ci
 npm run tauri -- dev
 ```
 
-To create a local unsigned app bundle:
+To create a local ad hoc signed app bundle:
 
 ```sh
-npm run tauri -- build --bundles app --no-sign
+npm run tauri -- build --bundles app
+codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/LayerSift.app
 ```
 
 The built app is under `src-tauri/target/release/bundle/macos/`. On Windows, install the [Windows Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and run `npm run tauri -- build --bundles nsis`; the installer is written under `src-tauri/target/release/bundle/nsis/`.

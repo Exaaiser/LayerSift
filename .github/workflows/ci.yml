@@ -45,6 +45,18 @@ jobs:
         run: npm run build
       - name: Test desktop backend
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Build ad hoc signed Mac app
+        run: npm run tauri -- build --bundles app
+      - name: Verify Mac app signature
+        run: codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/LayerSift.app
+      - name: Package and verify Mac downloads
+        run: bash scripts/package-macos.sh "$RUNNER_TEMP/layersift-release"
+      - name: Upload Mac desktop downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: layersift-mac-desktop
+          path: ${{ runner.temp }}/layersift-release/*
+          if-no-files-found: error
 
   desktop-windows:
     runs-on: windows-2025

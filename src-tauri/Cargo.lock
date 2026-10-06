@@ -2142,7 +2142,7 @@ dependencies = [
 
 [[package]]
 name = "layersift"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "blake2",
@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "layersift_desktop"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "layersift",
