@@ -553,6 +553,10 @@ footer button:hover {
 }
 .status.mismatch { background: rgba(219, 132, 132, 0.12); color: #efb5b5 !important; }
 .status.mismatch:before { background: #e9a1a1; }
+.status.warning { background: rgba(218, 176, 98, 0.12); color: #e6cca2 !important; }
+.status.warning:before { background: #e0bd84; }
+.status.neutral { background: rgba(169, 183, 196, 0.10); color: #c6d1dc !important; }
+.status.neutral:before { background: #a9b7c4; }
 .pill-list {
   display: flex;
   flex-wrap: wrap;
@@ -617,6 +621,7 @@ footer button:hover {
   font-size: 10px;
   padding: 8px 0 0;
 }
+.key-preview { -webkit-line-clamp: 8; }
 .preview-note {
   display: block;
   margin-top: 8px;

@@ -9,7 +9,9 @@ const PROJECT_README_URL = `${PROJECT_URL}/blob/main/README.md`;
 if (navigator.userAgent.includes('Windows')) document.documentElement.classList.add('windows');
 
 type Operation = 'resolve' | 'create';
-type BackendMode = 'analyze' | 'base64' | 'hash' | 'verify';
+type BackendMode = 'analyze' | 'base64' | 'hash' | 'verify' | 'database';
+type DatabaseCell = { column: string; value: string; storage_type: string; truncated: boolean };
+type DatabaseLocation = { table: string; column: string; row_key: { kind: string; fields: DatabaseCell[] }; matched_value: string; storage_type: string; context: DatabaseCell[] };
 type Artifact = { filename?: string; kind?: string; content_hint?: string; origin?: string; steps?: string[]; bytes?: number; preview?: string | null; hex_preview?: string | null };
 type Match = { origin?: string; field_type?: string; bytes?: number; hash_candidates?: string[] };
 type Response = {
@@ -17,6 +19,7 @@ type Response = {
   candidates: string[]; value: string | null; preview?: string;
   canCopy: boolean; report: { artifacts?: Artifact[]; matches?: Match[]; notes?: string[] };
   comparison?: { expected: string; actual: string; matches: boolean };
+  database?: { input_hash: string; text_matching: string; complete: boolean; matches: DatabaseLocation[] };
 };
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -34,6 +37,7 @@ const SAVE_DIRECTORY_KEY = 'layersift.saveDirectory';
 let operation: Operation = 'resolve';
 let filePath: string | null = null;
 let fileIsZip = false;
+let fileIsDatabase = false;
 let current: Response | null = null;
 let saveDirectory: string | null = localStorage.getItem(SAVE_DIRECTORY_KEY);
 let pages: HTMLElement[] = [];
@@ -107,11 +111,31 @@ function render(result: Response): void {
   byId<HTMLButtonElement>('save').disabled = false;
   byId('result-title').textContent = result.headline;
   const overview = newPage();
-  section(overview, 'STATUS', node('p', result.comparison?.matches === false ? 'status mismatch' : 'status', result.status));
+  const statusClass = result.comparison?.matches === false ? 'status mismatch' : result.database && !result.database.complete ? 'status warning' : result.database && !result.database.matches.length ? 'status neutral' : 'status';
+  section(overview, 'STATUS', node('p', statusClass, result.status));
   section(overview, 'EXPLANATION', node('p', '', result.explanation));
   const source = node('p', '', `${result.source.split(/[\\/]/).pop() || result.source} · ${result.inputBytes.toLocaleString('en-US')} bytes`);
   source.title = result.source;
   section(overview, 'SOURCE', source);
+  if (result.database) {
+    section(newPage(), 'SEARCH VALUE', node('div', 'value', result.database.input_hash));
+    section(pages[pages.length - 1], 'MATCHING', node('p', '', result.database.text_matching));
+    for (const [index, item] of result.database.matches.entries()) {
+      const page = newPage();
+      section(page, `LOCATION · ${index + 1} OF ${result.database.matches.length}`, node('p', '', `Table: ${item.table}\nColumn: ${item.column}\nStorage: ${item.storage_type}`));
+      const locator = item.row_key.fields.map(field => `${field.column} = ${field.value}${field.truncated ? '… (preview)' : ''}`).join('\n');
+      section(page, item.row_key.kind.toUpperCase(), node('div', 'value key-preview', locator || 'No stable row key is available. Use the row preview to inspect this record.'));
+      if (locator.length > 300 || item.row_key.fields.length > 3) page.append(node('small', 'preview-note', 'Key preview. Save the report for all returned key fields.'));
+      const matched = newPage();
+      section(matched, `MATCHED VALUE · MATCH ${index + 1}`, node('div', 'value', item.matched_value));
+      matched.append(node('small', 'preview-note', `${item.table} · ${item.column}. Save the report for the complete search result.`));
+      for (let offset = 0; offset < item.context.length; offset += 3) {
+        const fields = node('div', '', '');
+        for (const field of item.context.slice(offset, offset + 3)) fields.append(detail(field.column, `${field.value}${field.truncated ? '… (preview)' : ''}`));
+        section(newPage(), `ROW PREVIEW · MATCH ${index + 1} · FIELDS ${offset + 1}–${Math.min(offset + 3, item.context.length)}`, fields);
+      }
+    }
+  }
   if (result.candidates.length) {
     const list = node('div', 'pill-list', '');
     for (const name of result.candidates.slice(0, 8)) list.append(node('span', 'pill', term(name)));
@@ -190,9 +214,11 @@ function updateInputPlaceholder(): void {
   byId('verify-row').hidden = !hashing;
   byId('expected-row').hidden = !verifying;
   byId('zip-row').hidden = operation !== 'resolve' || !fileIsZip;
+  const database = operation === 'resolve' && fileIsDatabase;
+  byId('database-row').hidden = !database;
   byId('view-menu').classList.toggle('has-options', verifying);
   entry.placeholder = operation === 'resolve' ? 'Paste text or encoded data here…' : verifying ? 'Choose the file whose checksum you want to verify…' : method === 'base64' ? 'Enter text to encode as Base64…' : 'Enter text to hash…';
-  byId('run').firstChild!.textContent = operation === 'resolve' ? 'Resolve ' : verifying ? 'Verify ' : 'Create ';
+  byId('run').firstChild!.textContent = database ? 'Find hash ' : operation === 'resolve' ? 'Resolve ' : verifying ? 'Verify ' : 'Create ';
 }
 function setOperation(next: Operation): void {
   operation = next;
@@ -207,6 +233,8 @@ function setOperation(next: Operation): void {
 function clearFile(): void {
   filePath = null;
   fileIsZip = false;
+  fileIsDatabase = false;
+  byId<HTMLInputElement>('database-hash').value = '';
   byId<HTMLInputElement>('zip-password').value = '';
   byId('file-selection').hidden = true;
   byId('input-hint').hidden = false;
@@ -229,18 +257,20 @@ function settingsError(error: unknown): void {
 async function run(): Promise<void> {
   const button = byId<HTMLButtonElement>('run');
   if (button.disabled) return;
-  button.disabled = true;
-  const label = button.firstChild!.textContent;
+  const controls = document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('#view-menu button, #view-menu input, #view-menu select');
+  for (const control of controls) control.disabled = true;
+  entry.readOnly = true;
   button.firstChild!.textContent = 'Working ';
   try {
     const method = byId<HTMLSelectElement>('method').value;
-    const mode: BackendMode = operation === 'resolve' ? 'analyze' : method === 'base64' ? 'base64' : byId<HTMLInputElement>('verify-checksum').checked ? 'verify' : 'hash';
+    const mode: BackendMode = operation === 'resolve' ? fileIsDatabase ? 'database' : 'analyze' : method === 'base64' ? 'base64' : byId<HTMLInputElement>('verify-checksum').checked ? 'verify' : 'hash';
     const response = await invoke<Response>('run_action', { request: {
       mode,
       text: filePath ? null : entry.value,
       filePath,
       algorithm: mode === 'hash' || mode === 'verify' ? method : null,
       expectedDigest: mode === 'verify' ? byId<HTMLInputElement>('expected-digest').value : null,
+      databaseHash: mode === 'database' ? byId<HTMLInputElement>('database-hash').value : null,
       caesarShift: null,
       xorKey: null,
       zipPassword: mode === 'analyze' && fileIsZip ? byId<HTMLInputElement>('zip-password').value || null : null,
@@ -248,7 +278,7 @@ async function run(): Promise<void> {
     } });
     render(response);
   } catch (error) { errorPanel(error); }
-  finally { byId<HTMLInputElement>('zip-password').value = ''; button.disabled = false; button.firstChild!.textContent = label; }
+  finally { byId<HTMLInputElement>('zip-password').value = ''; for (const control of controls) control.disabled = false; entry.readOnly = false; updateInputPlaceholder(); }
 }
 
 byId('tab-menu').addEventListener('click', () => showView('menu'));
@@ -290,9 +320,10 @@ byId('choose-file').addEventListener('click', async () => {
     const selected = await open({ multiple: false, directory: false, title: 'Choose a file' });
     if (typeof selected !== 'string') return;
     clearFile();
-    const details = await invoke<{ bytes: number; isZip: boolean }>('file_details', { path: selected });
+    const details = await invoke<{ bytes: number; isZip: boolean; isSqlite: boolean }>('file_details', { path: selected });
     filePath = selected;
     fileIsZip = details.isZip;
+    fileIsDatabase = details.isSqlite;
     byId<HTMLInputElement>('zip-password').value = '';
     entry.value = '';
     byId('file-name').textContent = selected.split(/[\\/]/).pop() || selected;
@@ -304,6 +335,9 @@ byId('choose-file').addEventListener('click', async () => {
 byId('remove-file').addEventListener('click', clearFile);
 entry.addEventListener('input', () => { if (entry.value && filePath) clearFile(); });
 byId('run').addEventListener('click', () => { void run(); });
+byId('database-hash').addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); void run(); }
+});
 byId('close-result').addEventListener('click', closePanel);
 scrim.addEventListener('click', closePanel);
 byId('save').addEventListener('click', async () => {

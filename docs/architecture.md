@@ -10,8 +10,10 @@ flowchart LR
     Inspect --> Result[Content, sources, steps, byte counts]
     Action -->|Create| Encode[Base64 or digest]
     Action -->|Verify| Compare[File digest vs expected checksum]
+    Action -->|Resolve SQLite| Lookup[Read-only hash lookup]
     Encode --> Result
     Compare --> Result
+    Lookup --> Result
     Result --> Save[Local reports and recovered files]
 ```
 
@@ -42,6 +44,16 @@ The CLI can also supply a known password for an archive embedded in another inpu
 Creation hashes the exact input bytes. File checksum verification compares the chosen algorithm's digest against a supplied hexadecimal value, accepting surrounding whitespace and either letter case. It validates the expected digest's length and character set, and reports Match or Mismatch with both values. Line endings and other byte changes matter.
 
 A matching checksum establishes agreement with the supplied value. Authenticity depends on obtaining that value from a trusted source. Hash format suggestions in Resolve use length and character set; several algorithms can share a format. They do not identify the exact algorithm or recover the original input.
+
+## SQLite lookup
+
+The shared [SQLite module](../src/database.rs) uses bundled SQLite through rusqlite so users do not need a separate database runtime on Mac or Windows. The database opens with [read-only flags](https://docs.rs/rusqlite/0.40.2/rusqlite/struct.OpenFlags.html), query-only mode, trusted schema disabled, a short busy timeout, and a read transaction. No user SQL is executed. Input values are bound parameters; table and column identifiers from the schema are quoted.
+
+Ordinary main-schema tables are searched for entire TEXT values or the corresponding raw digest BLOB. Hex text ignores ASCII letter case. Non-hex strings match case exactly. Result locations use primary keys in schema order, including composite keys on WITHOUT ROWID tables. Nullable keys fall back to an unshadowed `rowid` alias when possible. If every rowid alias is shadowed and no usable key exists, the report explicitly says a key is unavailable. A rowid is a snapshot locator and can change after database maintenance.
+
+Search is bounded to 64 tables, 256 columns, 100 matching cells, and an approximately ten-second deadline enforced by loop checks and a SQLite progress handler. The SQLite length limit is 1 MiB. Limits and skipped/failed queries mark the result incomplete. Views, virtual/shadow tables, generated columns, attached databases, encrypted databases, and substring searches are not supported. Row context is limited to six fields with 180-character/byte previews; truncated keys and fields are flagged. Reports contain these previews, not full copies of records or the database.
+
+The desktop runs actions on a blocking worker so scanning does not freeze the window. Database files are recognized by the SQLite header and bypass the regular 16 MB input limit for lookup only; Base64 and digest creation keep that input limit. Read-only access preserves database content, while normal SQLite locking/WAL sidecar behavior still applies. The CLI exposes the same module through `locate --database ... --hash ...`.
 
 ## Evidence and limitations
 

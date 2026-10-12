@@ -54,6 +54,10 @@
           <label for="zip-password">ZIP password <span>Optional · used for this analysis only</span></label>
           <input id="zip-password" type="password" autocomplete="off" placeholder="Enter a known password if needed…" />
         </div>
+        <div id="database-row" class="inline-field" hidden>
+          <label for="database-hash">Find hash <span>SQLite · read-only</span></label>
+          <input id="database-hash" type="text" spellcheck="false" autocomplete="off" maxlength="1024" placeholder="Paste the hash to locate in this database…" />
+        </div>
 
         <div class="action-row">
           <button id="choose-file" class="attach" type="button"><span>＋</span> Choose file</button>

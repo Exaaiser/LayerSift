@@ -21,7 +21,7 @@ Paste the JSON fixture → Resolve → inspect the recovered PNG and its bytes �
 
 These are actual Mac app captures with pauses between the five steps. The recovered PNG was saved and its bytes checked against the example's expected fingerprint.
 
-**Development source after v0.3.0:** the desktop now also verifies file checksums from Create and shows an optional password field when a ZIP file is selected in Resolve. These additions are prepared for the next combined release. The v0.3.0 CLI already supports checksum verification and known ZIP passwords.
+**Development source after v0.3.0:** the desktop also verifies file checksums from Create, shows an optional password field for ZIP files, and locates known hashes inside SQLite databases. These additions are prepared for the next combined release. The v0.3.0 CLI supports checksum verification and known ZIP passwords; SQLite lookup is in the development source.
 
 ## Downloads
 
@@ -59,6 +59,27 @@ For a ready-to-use check, use `examples/checksum.txt` with the value in `example
 
 See the [checksum result](docs/images/checksum.png) and [ZIP password controls](docs/images/zip-password.png) captured from the development app.
 
+### Find a hash in SQLite (development app)
+
+1. Choose **Resolve → Choose file** and select a SQLite database. Recognition uses its file header, including files without a `.sqlite` extension.
+2. Paste the known hash into **Find hash**, then select **Find hash**.
+3. Result pages show every found table and column, a primary key (including composite keys) or available `rowid`, the matched value, and a short row preview. **Save result** writes the lookup report into your selected folder.
+
+<p align="center"><img src="docs/images/sqlite-location.png" alt="SQLite hash lookup locating users.password_hash at primary key id 42" width="300"></p>
+
+SQLite records have no file line number. A primary key or `rowid` locates the actual record; `rowid` can change if the database is later reorganized. If no usable key exists, LayerSift reports that explicitly and provides the row preview.
+
+Lookup uses a read-only connection and parameterized queries. It matches entire TEXT values and raw digest BLOBs, including hex text with different letter case. Other text, such as a salted hash string, matches case exactly. Hashes nested inside JSON strings or other larger cell values are not searched as substrings.
+
+SQLite lookup streams queries rather than loading the whole database, so the regular 16 MB file input limit does not apply. It considers up to 64 ordinary tables, 256 columns, 100 matching fields, and roughly ten seconds of search. Limits or query failures produce **Partial search**, rather than a claim that no additional matches exist. Views, virtual/shadow tables, generated columns, attached databases, and encrypted SQLite formats are outside this lookup. Context previews show at most six fields and 180 characters or bytes per field; large keys are also marked as previews. SQLite values/records exceeding the 1 MiB query length limit can cause a partial search.
+
+Try [the synthetic database](examples/README.md#sqlite-hash-lookup) with its three documented hash locations. From a source build, the CLI supports the same lookup:
+
+```sh
+./target/release/layersift locate --database examples/hash-locations.sqlite \
+  --hash 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824 --json
+```
+
 ### CLI quick start
 
 ```sh
@@ -91,6 +112,7 @@ On Windows, extract `layersift-cli-windows-x64.zip` and run `layersift.exe` in a
 | Recovered files | Embedded PNG, JPEG, PDF, and ZIP members; ZIP passwords supplied through the CLI |
 | Hashes | MD5, SHA-1, SHA-2, SHA-3, and BLAKE2 creation; CLI verification; possible format reporting based on digest shape |
 | Reports | Source and transformation steps, byte counts, SHA-256 fingerprints, JSON report, local extraction |
+| SQLite lookup (development) | Known hash location by table, column, primary key or rowid; read-only TEXT/BLOB matching and bounded row previews |
 
 A hash digest cannot be decoded to recover its original input. A 64-character hexadecimal value can match several algorithms, so LayerSift lists possibilities without claiming a certain identification. Password guessing and general decryption are outside the scope of this release.
 

@@ -22,3 +22,10 @@ for case in manifest["cases"]:
 expected = (root / "examples" / "checksum.sha256").read_text().strip()
 subprocess.run([cli, "hash", "verify", "sha256", expected, "--file", str(root / "examples" / "checksum.txt")], check=True)
 print("PASS: checksum.txt matches checksum.sha256")
+case = manifest["database_case"]
+output = subprocess.check_output([cli, "locate", "--database", str(root / "examples" / case["file"]), "--hash", case["hash"], "--json"], text=True)
+report = json.loads(output)
+assert report["complete"], "SQLite example search was incomplete"
+actual = [{"table": item["table"], "column": item["column"], "key": {field["column"]:field["value"] for field in item["row_key"]["fields"]}} for item in report["matches"]]
+assert actual == case["expected"], f"SQLite locations differ from documented results: {actual!r}"
+print("PASS: hash-locations.sqlite returns the three expected table, column and record locations")

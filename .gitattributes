@@ -6,3 +6,4 @@ examples/*.sha256 text eol=lf
 *.zip binary
 *.png binary
 *.gif binary
+*.sqlite binary

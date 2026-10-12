@@ -31,6 +31,7 @@ struct ActionRequest {
     file_path: Option<String>,
     algorithm: Option<String>,
     expected_digest: Option<String>,
+    database_hash: Option<String>,
     caesar_shift: Option<i32>,
     xor_key: Option<String>,
     zip_password: Option<String>,
@@ -226,16 +227,18 @@ fn file_details(path: String) -> Result<Value, String> {
     if !metadata.is_file() {
         return Err("Choose a file.".into());
     }
-    if metadata.len() > MAX_INPUT {
-        return Err("File exceeds the 16 MB limit.".into());
-    }
     let mut header = Vec::new();
     fs::File::open(path)
-        .and_then(|file| file.take(4).read_to_end(&mut header))
+        .and_then(|file| file.take(16).read_to_end(&mut header))
         .map_err(|error| error.to_string())?;
+    let is_sqlite = header == layersift::database::SQLITE_HEADER;
+    if metadata.len() > MAX_INPUT && !is_sqlite {
+        return Err("File exceeds the 16 MB limit.".into());
+    }
     Ok(json!({
         "bytes": metadata.len(),
-        "isZip": matches!(header.as_slice(), b"PK\x03\x04" | b"PK\x05\x06" | b"PK\x07\x08")
+        "isSqlite": is_sqlite,
+        "isZip": matches!(header.get(..4), Some(b"PK\x03\x04" | b"PK\x05\x06" | b"PK\x07\x08"))
     }))
 }
 
@@ -246,11 +249,50 @@ fn perform_action(request: ActionRequest) -> Result<(Value, StoredResult), Strin
         file_path,
         algorithm,
         expected_digest,
+        database_hash,
         caesar_shift,
         xor_key,
         zip_password,
         auto_xor,
     } = request;
+    if mode == "database" {
+        let path = file_path.ok_or("Choose a SQLite database file.")?;
+        let database =
+            layersift::database::locate_hash(Path::new(&path), &database_hash.unwrap_or_default())?;
+        let status = if !database.complete {
+            "Partial search"
+        } else if database.matches.is_empty() {
+            "No match"
+        } else {
+            "Match found"
+        };
+        let headline = if !database.complete {
+            "Database search incomplete"
+        } else if database.matches.is_empty() {
+            "Hash not found"
+        } else {
+            "Hash locations found"
+        };
+        let explanation = format!(
+            "Found {} matching fields after searching {} ordinary tables and {} columns. Records are identified by their primary key or available rowid; database records have no file line number.",
+            database.matches.len(),
+            database.scanned_tables,
+            database.scanned_columns
+        );
+        let response = json!({
+            "mode": "database", "headline": headline, "status": status, "explanation": explanation,
+            "source": path, "inputBytes": database.database_bytes, "candidates": [],
+            "value": null, "canCopy": false, "database": database,
+            "report": {"notes": database.notes}
+        });
+        return Ok((
+            response.clone(),
+            StoredResult {
+                report: response,
+                files: Vec::new(),
+            },
+        ));
+    }
     if mode == "verify" && file_path.is_none() {
         return Err("Choose a file to verify its checksum.".into());
     }
@@ -417,8 +459,13 @@ fn perform_action(request: ActionRequest) -> Result<(Value, StoredResult), Strin
 }
 
 #[tauri::command]
-fn run_action(request: ActionRequest, state: tauri::State<'_, AppState>) -> Result<Value, String> {
-    let (response, stored) = perform_action(request)?;
+async fn run_action(
+    request: ActionRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<Value, String> {
+    let (response, stored) = tauri::async_runtime::spawn_blocking(move || perform_action(request))
+        .await
+        .map_err(|error| error.to_string())??;
     *state
         .last
         .lock()
@@ -564,6 +611,54 @@ mod resolve_tests {
         assert_eq!(
             super::file_details(file.0.display().to_string()).unwrap()["isZip"],
             false
+        );
+    }
+
+    #[test]
+    fn sqlite_action_returns_field_locations_and_saves_the_search_report() {
+        let file = TempFile::new(include_bytes!("../../examples/hash-locations.sqlite"));
+        let details = super::file_details(file.0.display().to_string()).unwrap();
+        assert_eq!(details["isSqlite"], true);
+        assert_eq!(details["isZip"], false);
+        let (response, stored) = super::perform_action(request(serde_json::json!({
+            "mode":"database", "filePath":file.0,
+            "databaseHash":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        })))
+        .unwrap();
+        assert_eq!(response["database"]["matches"].as_array().unwrap().len(), 3);
+        assert_eq!(response["database"]["complete"], true);
+        assert_eq!(response["status"], "Match found");
+        assert_eq!(stored.report["database"], response["database"]);
+        assert!(stored.files.is_empty());
+    }
+
+    #[test]
+    fn sqlite_lookup_does_not_use_the_regular_file_input_size_limit() {
+        let file = TempFile::new(include_bytes!("../../examples/hash-locations.sqlite"));
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&file.0)
+            .unwrap()
+            .set_len(super::MAX_INPUT + 1)
+            .unwrap();
+        assert_eq!(
+            super::file_details(file.0.display().to_string()).unwrap()["isSqlite"],
+            true
+        );
+        assert!(
+            super::perform_action(request(serde_json::json!({
+                "mode":"database", "filePath":file.0,
+                "databaseHash":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+            })))
+            .is_ok()
+        );
+        assert!(
+            super::perform_action(request(serde_json::json!({
+                "mode":"hash", "filePath":file.0, "algorithm":"sha256"
+            })))
+            .err()
+            .unwrap()
+            .contains("16 MB")
         );
     }
 

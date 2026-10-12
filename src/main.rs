@@ -57,6 +57,15 @@ enum Command {
         #[command(subcommand)]
         operation: HashCommand,
     },
+    /// Locate a known hash value in a SQLite database (read-only).
+    Locate {
+        #[arg(long)]
+        database: PathBuf,
+        #[arg(long)]
+        hash: String,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Args)]
@@ -403,6 +412,39 @@ fn run() -> Result<()> {
         return Ok(());
     }
     match Cli::parse().command {
+        Command::Locate {
+            database,
+            hash,
+            json,
+        } => {
+            let report =
+                layersift::database::locate_hash(&database, &hash).map_err(io::Error::other)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "{} matching fields; {} tables and {} columns searched",
+                    report.matches.len(),
+                    report.scanned_tables,
+                    report.scanned_columns
+                );
+                for item in &report.matches {
+                    println!(
+                        "Table {:?} · Column {:?} · {}: {}",
+                        item.table,
+                        item.column,
+                        item.row_key.kind,
+                        serde_json::to_string(&item.row_key.fields)?
+                    );
+                }
+                if !report.complete {
+                    println!("Partial search: additional matches may exist.");
+                }
+                for note in &report.notes {
+                    println!("Note: {note}");
+                }
+            }
+        }
         Command::Inspect {
             input,
             options,

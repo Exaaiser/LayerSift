@@ -28,3 +28,23 @@ python3 scripts/check-examples.py
 ```
 
 On Windows, use `python scripts/check-examples.py`; the script selects `layersift.exe` automatically. It needs only Python's standard library and a built CLI.
+
+## SQLite hash lookup
+
+`hash-locations.sqlite` is a synthetic database for the development source after v0.3.0. Choose it in **Resolve**, then paste this hash into **Find hash**:
+
+```text
+2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+```
+
+Expected locations:
+
+| Table | Column | Record key | Storage |
+| --- | --- | --- | --- |
+| `events` | `checksum` | `tenant = demo`, `event_id = 7` | Uppercase hex TEXT, composite primary key in a WITHOUT ROWID table |
+| `files` | `digest` | `id = file-1` | Raw digest BLOB |
+| `users` | `password_hash` | `id = 42` | Lowercase hex TEXT |
+
+The fixture uses the known SHA-256 digest of `hello`; no real credentials or user records are included. The lookup identifies stored values without attempting to recover the original input. Database rows use record keys rather than source file line numbers.
+
+After building the source CLI, `scripts/check-examples.py` also verifies these three locations against `expected.json`.
